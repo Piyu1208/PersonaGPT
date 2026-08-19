@@ -1,31 +1,44 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
-import creators from "./creators";
+import creators, { type CreatorKey } from "./creators";
 
 const client = new OpenAI({
     baseURL: 'https://aicredits.in/v1',
     apiKey: process.env.OPEN_API_KEY
 });
 
+function isCreatorKey(value: unknown): value is CreatorKey {
+    return value === "hitesh" || value === "piyush";
+} 
+
+
 export async function POST(request: Request) {
     try {
         const body = await request.json();
 
-        const { question, creator } = body;
+        const { messages, creator } = body;
 
-        if (!question || !creator) {
+        if (!messages || !Array.isArray(messages) || !creator) {
             return NextResponse.json(
-                { error: "Question and creator are required."},
+                { error: "Messages and creator are required."},
                 { status: 400 }
             );
         }
 
 
+        if (!isCreatorKey(creator)) {
+            return NextResponse.json(
+                { error: "Invalid creator."},
+                { status: 400 }
+            );
+        }
+
+        const instructions = creators[creator].instructions;
 
         const response = await client.responses.create({
             model: "gpt-4o-mini",
-            instructions: creator === 'Hitesh' ? creators.hitesh.instructions : creators.piyush.instructions,
-            input: question,
+            instructions,
+            input: messages,
         });
 
         return NextResponse.json({
@@ -35,7 +48,7 @@ export async function POST(request: Request) {
         console.error("Open API error:", error);
 
         return NextResponse.json(
-            { error: "Something went erong while generating the answer." },
+            { error: "Something went wrong while generating the answer." },
             { status: 500 }
         );
     }
