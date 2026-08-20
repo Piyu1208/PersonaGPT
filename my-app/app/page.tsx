@@ -4,15 +4,26 @@ import { useEffect, useRef, useState } from "react";
 
 type Creator = "hitesh" | "piyush";
 
-type Message = {
-  role: "user" | "assistant";
+type UserMessage = {
+  role: "user";
   content: string;
 };
+
+type AssistantMessage = {
+  role: "assistant";
+  content: {
+    creator: string;
+    answer: string;
+  };
+};
+
+type Message = UserMessage | AssistantMessage;
 
 export default function Home() {
   const [question, setQuestion] = useState("");
   const [creator, setCreator] = useState<Creator>("hitesh");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,11 +37,6 @@ export default function Home() {
     });
   }, [messages, loading]);
 
-
-  const handleContext = async () => {
-    
-  }
-
   const handleSubmit = async () => {
     const trimmedQuestion = question.trim();
 
@@ -39,14 +45,12 @@ export default function Home() {
     setError(null);
     setQuestion("");
 
-    const userMessage: Message = {
+    const userMessage: UserMessage = {
       role: "user",
       content: trimmedQuestion,
     };
 
-    const updatedMessages = [...messages, userMessage];
-
-    setMessages(updatedMessages);
+    setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
 
     try {
@@ -56,8 +60,9 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          messages: updatedMessages,
+          input: trimmedQuestion,
           creator,
+          conversationId,
         }),
       });
 
@@ -67,10 +72,24 @@ export default function Home() {
         throw new Error(data.error || "Something went wrong");
       }
 
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: data.answer,
+      /*
+       * Store the conversation ID returned by the backend.
+       *
+       * First request:
+       * conversationId = null
+       *
+       * Backend creates a conversation and returns its ID.
+       *
+       * All subsequent requests use that same ID.
+       */
+      setConversationId(data.conversationId);
 
+      const assistantMessage: AssistantMessage = {
+        role: "assistant",
+        content: {
+          creator: data.creator,
+          answer: data.answer,
+        },
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -78,7 +97,7 @@ export default function Home() {
       setError(
         err instanceof Error
           ? err.message
-          : "Something went wrong"
+          : "Something went wrong",
       );
     } finally {
       setLoading(false);
@@ -87,7 +106,7 @@ export default function Home() {
   };
 
   const handleKeyDown = (
-    e: React.KeyboardEvent<HTMLTextAreaElement>
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
   ) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -99,8 +118,10 @@ export default function Home() {
     if (loading) return;
 
     setMessages([]);
+    setConversationId(null);
     setError(null);
     setQuestion("");
+
     textareaRef.current?.focus();
   };
 
@@ -182,25 +203,31 @@ export default function Home() {
                   <div
                     key={index}
                     className={`flex gap-4 ${
-                      isUser ? "justify-end" : "justify-start"
+                      isUser
+                        ? "justify-end"
+                        : "justify-start"
                     }`}
                   >
                     {/* Assistant avatar */}
                     {!isUser && (
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-500 text-sm font-bold text-white">
-                        {JSON.parse(message.content).creator === "Piyush" ? "P" : "H"}
+                        {message.content.creator === "Piyush"
+                          ? "P"
+                          : "H"}
                       </div>
                     )}
 
                     <div
                       className={`max-w-[85%] ${
-                        isUser ? "items-end" : "items-start"
+                        isUser
+                          ? "items-end"
+                          : "items-start"
                       }`}
                     >
                       {/* Creator name */}
                       {!isUser && (
                         <div className="mb-1 text-xs font-medium text-orange-400">
-                          {JSON.parse(message.content).creator}
+                          {message.content.creator}
                         </div>
                       )}
 
@@ -213,7 +240,9 @@ export default function Home() {
                         }
                       >
                         <div className="whitespace-pre-wrap">
-                          {isUser ? message.content: JSON.parse(message.content).answer}
+                          {isUser
+                            ? message.content
+                            : message.content.answer}
                         </div>
                       </div>
                     </div>
@@ -230,7 +259,9 @@ export default function Home() {
 
                   <div>
                     <div className="mb-2 text-xs font-medium text-orange-400">
-                      {creator === "piyush" ? "Piyush" : "Hitesh"}
+                      {creator === "piyush"
+                        ? "Piyush"
+                        : "Hitesh"}
                     </div>
 
                     <div className="flex items-center gap-1.5 py-2">
@@ -295,11 +326,17 @@ export default function Home() {
               <textarea
                 ref={textareaRef}
                 value={question}
-                onChange={(e) => setQuestion(e.target.value)}
+                onChange={(e) =>
+                  setQuestion(e.target.value)
+                }
                 onKeyDown={handleKeyDown}
                 disabled={loading}
                 rows={1}
-                placeholder={`Message ${creator === "hitesh" ? "Hitesh" : "Piyush"}...`}
+                placeholder={`Message ${
+                  creator === "hitesh"
+                    ? "Hitesh"
+                    : "Piyush"
+                }...`}
                 className="max-h-48 min-h-[56px] w-full resize-none bg-transparent px-4 py-4 pr-14 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 disabled:cursor-not-allowed"
               />
 
