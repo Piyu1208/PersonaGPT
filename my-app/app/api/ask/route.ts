@@ -4,6 +4,7 @@ import creators, { type CreatorKey, summaryPrompt } from "./creators";
 import Conversation from "../models/Conversation";
 import Summary from "../models/Summary";
 import dbConnect from "../lib/mongoose";
+import { encoding_for_model } from "tiktoken";
 
 const client = new OpenAI({
   baseURL: "https://aicredits.in/v1",
@@ -13,6 +14,8 @@ const client = new OpenAI({
 function isCreatorKey(value: unknown): value is CreatorKey {
   return value === "hitesh" || value === "piyush";
 }
+
+const encoder = encoding_for_model("gpt-4o-mini");
 
 type OpenAIMessage = {
   role: "user" | "assistant";
@@ -29,6 +32,34 @@ function toOpenAIMessages(
         ? JSON.stringify(message.content)
         : String(message.content),
   }));
+}
+
+function splitMessagesByTokenBudget(
+  messages: OpenAIMessage[],
+  recentTokenBudget: number,
+) {
+  const recentMessages: OpenAIMessage[] = [];
+  let recentTokens = 0;
+
+  let splitIndex = messages.length;
+
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const messageTokens = encoder.encode(messages[i].content).length;
+
+    if (recentTokens + messageTokens <= recentTokenBudget) {
+      recentMessages.unshift(messages[i]);
+      recentTokens += messageTokens;
+      splitIndex = i;
+    } else {
+      break;
+    }
+  }
+
+  return {
+    messagesToSummarize: messages.slice(0, splitIndex),
+    recentMessages,
+    splitIndex,
+  };
 }
 
 export async function POST(request: Request) {
@@ -85,7 +116,9 @@ export async function POST(request: Request) {
 
     const instructions = creators[creator].instructions;
 
-    const RECENT_MESSAGES_COUNT = 8;
+    const RECENT_MESSAGES_BUDGET = 2500;
+
+    const CONTEXT_THRESHOLD = 7000;
 
     let messagesToSend: OpenAIMessage[];
 
@@ -94,12 +127,16 @@ export async function POST(request: Request) {
       conversation: conversation._id,
     });
 
+    let totalTokenCount = messages.reduce(
+      (total, message) => total + encoder.encode(message.content).length,
+      summaryDoc ? encoder.encode(summaryDoc.content).length : 0,
+    );
+
     //Case 1: no summary, at 10 messages: sum(1-8), 9, 10
 
-    if (!summaryDoc && messages.length >= 30) {
-      const messagesToSummarize = messages.slice(0, -RECENT_MESSAGES_COUNT);
-
-      const recentMessages = messages.slice(-RECENT_MESSAGES_COUNT);
+    if (!summaryDoc && totalTokenCount > CONTEXT_THRESHOLD) {
+      const { messagesToSummarize, recentMessages } =
+        splitMessagesByTokenBudget(messages, RECENT_MESSAGES_BUDGET);
 
       const summaryResponse = await client.responses.create({
         model: "gpt-4o-mini",
@@ -109,12 +146,15 @@ export async function POST(request: Request) {
 
       const summary = summaryResponse.output_text;
 
-      //first summary created 1-8
+      //first summary created
 
       summaryDoc = await Summary.create({
         conversation: conversation._id,
         content: summary,
-        summarizedUntil: messages.length - RECENT_MESSAGES_COUNT,
+
+        //summary contains messags from index 0
+        //up to this index - 1
+        summarizedUntil: messagesToSummarize.length,
       });
 
       messagesToSend = [
@@ -128,59 +168,72 @@ export async function POST(request: Request) {
 
     //Case 2: summary already exists
     else if (summaryDoc) {
-      const summarizedUntil = summaryDoc.summarizedUntil;
+      const unsummarizedMessages = messages.slice(summaryDoc.summarizedUntil);
 
-      const newMessagesToSummarize = messages.slice(
-        summarizedUntil,
-        -RECENT_MESSAGES_COUNT,
-      );
+      const totalTokenCount =
+        encoder.encode(summaryDoc.content).length +
+        unsummarizedMessages.reduce(
+          (total, message) => total + encoder.encode(message.content).length,
+          0,
+        );
 
-      //only create new summary if there are new msgs to be summarized
-      if (newMessagesToSummarize.length > 28) {
-        //give summarizer: old summ + new msgs (9-15), output new sum 1-15
+      if (totalTokenCount > CONTEXT_THRESHOLD) {
+        const { messagesToSummarize, recentMessages } =
+          splitMessagesByTokenBudget(
+            unsummarizedMessages,
+            RECENT_MESSAGES_BUDGET,
+          );
 
-        const summaryInput: OpenAIMessage[] = [
+        //update summary only if there are messages
+        //that actually need to be added to it
+        if (messagesToSummarize.length > 0) {
+          const summaryInput: OpenAIMessage[] = [
+            {
+              role: "user",
+              content: `Existing conversation summary:
+            \n${summaryDoc.content}\n\nUpdate this summary using
+            the following next messages.
+            `,
+            },
+            ...messagesToSummarize,
+          ];
+
+          const summaryResponse = await client.responses.create({
+            model: "gpt-4o-mini",
+            instructions: summaryPrompt,
+            input: summaryInput,
+          });
+
+          //Overwrite the previous summary
+          summaryDoc.content = summaryResponse.output_text;
+
+          //Move the boundary forward
+          summaryDoc.summarizedUntil += messagesToSummarize.length;
+
+          await summaryDoc.save();
+        }
+
+        messagesToSend = [
           {
             role: "user",
-            content: `Existing conversation summary:
-            \n${summaryDoc.content}\n\nUpdate this summary using
-            the following new messages.
-            `,
+            content: `Summary of earlier conversation:\n${summaryDoc.content}`,
           },
-          ...newMessagesToSummarize,
+          ...recentMessages,
         ];
-
-        const summaryResponse = await client.responses.create({
-          model: "gpt-4o-mini",
-          instructions: summaryPrompt,
-          input: summaryInput,
-        });
-
-        const newSummary = summaryResponse.output_text;
-
-        //Overwrite the previous summary.
-
-        summaryDoc.content = newSummary;
-
-        summaryDoc.summarizedUntil = messages.length - RECENT_MESSAGES_COUNT;
-
-        await summaryDoc.save();
+      } else {
+        //Context is still small enough
+        // Don't summarize anything
+        messagesToSend = [
+          {
+            role: "user",
+            content: `Summary of earlier conversation:\n${summaryDoc.content}`,
+          },
+          ...unsummarizedMessages,
+        ];
       }
-
-      const recentMessages = messages.slice(-RECENT_MESSAGES_COUNT);
-
-      //main model gets summary + last 2 msgs
-
-      messagesToSend = [
-        {
-          role: "user",
-          content: `Summary of earlier conversation:\n${summaryDoc.content}`,
-        },
-        ...recentMessages,
-      ];
     }
 
-    //Case 3 less than 10 msgs and no summary.
+    //Case 3 context small no summary.
     else {
       messagesToSend = messages;
     }
