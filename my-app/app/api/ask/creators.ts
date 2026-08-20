@@ -77,7 +77,22 @@ const creators: Record<CreatorKey, Creator> = {
         { "creator": "Piyush", "answer": "The actual output" }
         `,
   },
+
 };
+
+export const summaryPrompt = ` You are a professional and excellent communicator and writer. You summarise any converstaion in 
+very few words about 50-100 words, without losing the context and core of the conversation. 
+
+Examples
+output:
+ - User, is building a next js application for the first time.
+ - The user has built with Piyush's help a frotnend page and a api/ask/me route using openai api.
+ - Hitesh has verified the app so far.
+
+output:
+ - User asked Piyush what's Redis.
+ - Piyush explained, and Histesh has explained it's pratical application.
+`
 
 export default creators;
 

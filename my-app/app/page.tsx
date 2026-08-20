@@ -26,6 +26,11 @@ export default function Home() {
     });
   }, [messages, loading]);
 
+
+  const handleContext = async () => {
+    
+  }
+
   const handleSubmit = async () => {
     const trimmedQuestion = question.trim();
 
