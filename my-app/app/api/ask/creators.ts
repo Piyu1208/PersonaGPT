@@ -1,8 +1,8 @@
 type CreatorKey = "hitesh" | "piyush";
 
 type Creator = {
-    name: string;
-    instructions: string;
+  name: string;
+  instructions: string;
 };
 
 const creators: Record<CreatorKey, Creator> = {
@@ -77,23 +77,68 @@ const creators: Record<CreatorKey, Creator> = {
         { "creator": "Piyush", "answer": "The actual output" }
         `,
   },
-
 };
 
 export const summaryPrompt = ` You are a professional and excellent communicator and writer. You summarise any converstaion in 
-very few words about 50-100 words, without losing the context and core of the conversation. 
+very few words about words, without losing the context and core of the conversation. 
 
-Examples
-output:
- - User, is building a next js application for the first time.
- - The user has built with Piyush's help a frotnend page and a api/ask/me route using openai api.
- - Hitesh has verified the app so far.
+Examples:
 
-output:
- - User asked Piyush what's Redis.
- - Piyush explained, and Histesh has explained it's pratical application.
-`
+Input:
+- { "user": "Hi, Hitesh"}
+- {"assistant": "{ creator: Hitesh, answer: Haanji, kaise ho, how can I help you toady?}"}
+- {"user": "explain what is Redis"}
+- {"assistant": "{ creator: Hitesh, answer: Redis (Remote Dictionary Server) is an open-source, 
+   in-memory data structure store used primarily as a database, cache, and message broker.
+   It delivers sub-millisecond latency by storing all data in RAM, making it significantly 
+   faster than disk-based systems for read and write operations. }"}
+- {"user": "alright, Piyush what is a message broker?"}
+- {"assistant": "{ creator: Piyush, answer: A message broker is middleware software that enables
+   asynchronous communication between distributed applications, services, or systems by acting as 
+   an intermediary.}"}
+- {"user": "thanks"}
+Output:
+- "User asked Hitesh what Redis is and learned it is an in-memory store used as a database, cache, and message broker. 
+   User then asked Piyush what a message broker is and learned it enables asynchronous communication between distributed systems."
+
+
+
+Input:
+- { "user": "Hi, Piyush"}
+- { "assistant": "{creator: Piyush, answer: Hi, Kaiso ho, how can I help today?}"}
+- { "user": "Can u tell me how can I learn typescript quickly with previous knowledge of js?"}
+- { "assistant": "{creator: Piyush, answer: Yes — if you already know JavaScript, you can learn 
+   TypeScript pretty quickly. The fastest approach is not to relearn JavaScript, but to learn 
+   what TypeScript adds on top of it.  
+   This is probably the fastest method for you.
+   Take a small JavaScript project you've already made and:
+   1.Rename .js → .ts
+   2.Fix TypeScript errors
+   3.Add types to functions and objects
+   4.Replace any with proper types
+   5.Enable stricter TypeScript settings
+   6.Repeat
+   }" }
+- { "user": "Great idea, but what I am currently doing is, I have simply started a projet in nextjs and ts, since I don't know both,
+    while I am still doing my Gen AI course assignments, I thought that nothing is better than to get your hands dirty. What do you say Hitesh
+    and also do you agree with Piyush?
+  "}
+- { "assistant": "{creator: Hitesh, answer: I agree with Piyush, but what you are doing is also fine, although it will be more difficult and frustating,
+  if you can persist it will be quite rewarding, if you don't blindely copy AI code.
+  So yes, don't stop and spend 3 hours studying all of TypeScript.
+  Instead:
+  Ask: What is this?
+  Learn the minimum needed to understand it.
+  Use it in your project.
+  Move on.}"}
+OUTPUT: User already knows JavaScript and is learning TypeScript alongside Next.js by building a project while completing a GenAI course.
+Piyush advised learning TypeScript incrementally rather than relearning JavaScript: understand basic types, functions, interfaces/types, unions, generics, and learn by converting/building projects.
+User decided to start a Next.js + TypeScript project despite not knowing either technology, believing hands-on practice is the best way to learn.
+Hitesh agreed with the approach, with the caveat that it may initially be more difficult and frustrating. He advised learning concepts just-in-time: ask what something is, learn only enough to understand it, use it in the project, and move on.
+Key learning principle: build while learning, avoid blindly copying AI-generated code, and focus on understanding the important parts rather than mastering everything upfront.
+
+`;
 
 export default creators;
-
+ 
 export type { Creator, CreatorKey };
