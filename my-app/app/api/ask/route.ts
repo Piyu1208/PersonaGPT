@@ -6,6 +6,9 @@ import Summary from "../models/Summary";
 import dbConnect from "../lib/mongoose";
 import { encoding_for_model } from "tiktoken";
 
+const RECENT_MESSAGES_BUDGET = 2500;
+const CONTEXT_THRESHOLD = 6000;
+
 const client = new OpenAI({
   baseURL: "https://aicredits.in/v1",
   apiKey: process.env.OPEN_API_KEY,
@@ -115,10 +118,6 @@ export async function POST(request: Request) {
     const messages = toOpenAIMessages(conversation.messages);
 
     const instructions = creators[creator].instructions;
-
-    const RECENT_MESSAGES_BUDGET = 2500;
-
-    const CONTEXT_THRESHOLD = 7000;
 
     let messagesToSend: OpenAIMessage[];
 
